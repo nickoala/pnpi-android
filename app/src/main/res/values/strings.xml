@@ -1,0 +1,16 @@
+<resources>
+    <string name="app_name">Plug n Pi</string>
+    <string name="empty"></string>
+    <string name="placeholder">text</string>
+    <string name="connected">Connected</string>
+    <string name="no_plug">Please plug in Raspberry Pi via USB</string>
+    <string name="accessory_none">Plug n Pi seems not running on Raspberry Pi. Please enable it.</string>
+    <string name="accessory_unrecognized">Incompatible device</string>
+    <string name="accessory_version_unsupported">The app does not support the version of protocol used by Raspberry Pi. Please update the app.</string>
+    <string name="accessory_permission_denied">You did not permit the app to talk to Raspberry Pi. Re-plug to try again.</string>
+    <string name="accessory_open_failed">Failed to open device. Re-plug to try again.</string>
+    <string name="open_network">This is an open network. No passphrase is required.</string>
+    <string name="host_halting">Raspberry Pi is shutting down</string>
+    <string name="host_rebooting">Raspberry Pi is rebooting. Connection will be back up soon.</string>
+    <string name="no_hotspot">No hotspot is found</string>
+</resources>
