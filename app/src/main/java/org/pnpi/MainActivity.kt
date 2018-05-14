@@ -10,17 +10,16 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.ParcelFileDescriptor
 import android.support.v7.app.AppCompatActivity
+import android.util.TypedValue
 import android.view.View
 import android.view.ViewGroup
-import android.widget.Button
-import android.widget.PopupMenu
-import android.widget.Switch
-import android.widget.Toast
+import android.widget.*
 import com.google.android.agera.Repositories
 import com.google.android.agera.Updatable
 import org.pnpi.protocol.*
 import java.lang.IllegalStateException
 import java.net.Inet4Address
+import java.net.Inet6Address
 import java.net.InetAddress
 import java.util.*
 
@@ -502,15 +501,6 @@ class MainActivity : AppCompatActivity() {
                 val host = msg.obj as HostStates
                 val layout = findViewById<ViewGroup>(R.id.Host)
 
-                fun pickPrimaryIP(s: Set<InetAddress>): InetAddress? =
-                        s.sortedWith(Comparator { a,b ->
-                            when {
-                                (a is Inet4Address && b !is Inet4Address) -> -1
-                                (a !is Inet4Address && b is Inet4Address) -> 1
-                                else -> 0
-                            }
-                        }).firstOrNull()
-
                 fun nameSource(n: NetworkInterface, existing: Source<NetworkInterface>?) =
                         Pair(n.name, existing ?: Source(n))
 
@@ -546,26 +536,54 @@ class MainActivity : AppCompatActivity() {
                             it.name
                         })
 
-                        link(s.base, textFollows(v, R.id.primary, s.base) {
-                            pickPrimaryIP(it.ips)?.hostAddress ?: "No IP address"
+                        fun pickPrimaryIP(s: Set<InetAddress>): Set<InetAddress> =
+                                s.sortedWith(Comparator { a,b ->
+                                    when {
+                                        (a is Inet4Address && b !is Inet4Address) -> -1
+                                        (a !is Inet4Address && b is Inet4Address) -> 1
+                                        else -> 0
+                                    }
+                                }).take(1).toSet()
+
+                        val primarySet = Repositories.repositoryWithInitialValue(setOf<InetAddress>())
+                                .observe(s.base)
+                                .onUpdatesPerLoop()
+                                .getFrom(s.base)
+                                .thenTransform { pickPrimaryIP(it.ips) }
+                                .compile()
+
+                        val secondarySet = Repositories.repositoryWithInitialValue(setOf<InetAddress>())
+                                .observe(s.base)
+                                .onUpdatesPerLoop()
+                                .getFrom(s.base)
+                                .thenTransform { it.ips.minus(pickPrimaryIP(it.ips)) }
+                                .compile()
+
+                        link(primarySet, textFollows(v, R.id.primary, primarySet) {
+                            it.firstOrNull()?.hostAddress ?: "No IP address"
                         })
 
-                        link(s.base, textFollows(v, R.id.secondary, s.base) { ni ->
-                            val p = pickPrimaryIP(ni.ips)
-                            p?.let {
-                                ni.ips.filter { it != p }
-                                        .map { it.hostAddress }
-                                        .sorted()
-                                        .joinToString("\n")
-                            } ?: ""
+                        link(secondarySet, textFollows(v, R.id.secondary, secondarySet) {
+                            it.map { it.hostAddress }.sorted().joinToString("\n")
+                        })
+
+                        link(primarySet, Updatable {
+                            val ip = primarySet.get().firstOrNull()
+                            val tv = v.findViewById<TextView>(R.id.primary)
+
+                            if (ip is Inet6Address) {
+                                // shrink font to avoid overlap with name
+                                tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+                                // same size as ssid and secondary
+                            }
+                            else {
+                                tv.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 20f)
+                                // same size as name
+                            }
                         })
 
                         link(s.base, textFollows(v, R.id.ssid, s.base) {
                             it.ssid
-                        })
-
-                        link(s.base, visibilityFollows(v, R.id.ssid, s.base) {
-                            if (it.ssid == "") View.GONE else View.VISIBLE
                         })
 
                         // Make IP display clickable
