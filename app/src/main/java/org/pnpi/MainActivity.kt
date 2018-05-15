@@ -49,6 +49,11 @@ enum class ContactStatus {
     ENDED
 }
 
+enum class TroubleshootStatus {
+    NONE,
+    NO_ACCESSORY_BUT_SERVER_IS_ENABLED
+}
+
 class AccessoryChannel private constructor(
         private val protocol: Protocol,
         private val fd: ParcelFileDescriptor) {
@@ -101,7 +106,7 @@ class MainActivity : AppCompatActivity() {
     private object Timeout {
         const val SERVICE_SWITCH = 5500L
         const val HOTSPOT_CONNECT = 12000L
-        const val AWAIT_ACCESSORY = 8100L
+        const val AWAIT_ACCESSORY = 30000L  // Give time for server to come up, when Pi is starting.
     }
 
     private lateinit var accessoryFilter: AccessoryFilter
@@ -109,6 +114,7 @@ class MainActivity : AppCompatActivity() {
     private val plugStatus = Repositories.mutableRepository(PlugStatus.NEVER)
     private val accessoryStatus = Repositories.mutableRepository(AccessoryStatus.NONE)
     private val contactStatus = Repositories.mutableRepository(ContactStatus.NONE)
+    private val troubleshootStatus = Repositories.mutableRepository(TroubleshootStatus.NONE)
 
     private val hostIsCommunicating = Repositories.repositoryWithInitialValue(false)
             .observe(contactStatus)
@@ -207,47 +213,98 @@ class MainActivity : AppCompatActivity() {
                 supportActionBar?.title = title.get()
             })
 
-            fun messageResid(p: PlugStatus, a: AccessoryStatus): Int {
+            data class MessageGroupDescriptor(
+                    val messageResid: Int,
+                    val troubleshootResid: Int,
+                    val troubleshootOnClick: ((View) -> Unit)?
+            )
+
+            fun getDescriptor(p: PlugStatus, a: AccessoryStatus, t: TroubleshootStatus):
+                    MessageGroupDescriptor {
                 when (p) {
-                    PlugStatus.NEVER -> return R.string.no_plug
-                    PlugStatus.UNPLUGGED -> return R.string.no_plug
+                    PlugStatus.NEVER -> return MessageGroupDescriptor(
+                            R.string.no_plug, R.string.empty, null)
+
+                    PlugStatus.UNPLUGGED -> return MessageGroupDescriptor(
+                            R.string.no_plug, R.string.empty, null)
                 }
 
                 when (a) {
-                    AccessoryStatus.NONE -> return R.string.accessory_none
-                    AccessoryStatus.UNRECOGNIZED -> return R.string.accessory_unrecognized
-                    AccessoryStatus.VERSION_UNSUPPORTED -> return R.string.accessory_version_unsupported
-                    AccessoryStatus.PERMISSION_DENIED -> return R.string.accessory_permission_denied
-                    AccessoryStatus.OPEN_FAILED -> return R.string.accessory_open_failed
+                    AccessoryStatus.NONE -> return when (t) {
+                        TroubleshootStatus.NONE -> MessageGroupDescriptor(
+                                R.string.accessory_none, R.string.server_is_enabled, {
+                                    troubleshootStatus.accept(TroubleshootStatus.NO_ACCESSORY_BUT_SERVER_IS_ENABLED)
+                        })
+
+                        TroubleshootStatus.NO_ACCESSORY_BUT_SERVER_IS_ENABLED -> MessageGroupDescriptor(
+                                R.string.restart_phone, R.string.empty, null)
+                    }
+                    AccessoryStatus.UNRECOGNIZED -> return MessageGroupDescriptor(
+                            R.string.accessory_unrecognized, R.string.empty, null)
+
+                    AccessoryStatus.VERSION_UNSUPPORTED -> return MessageGroupDescriptor(
+                            R.string.accessory_version_unsupported, R.string.empty, null)
+
+                    AccessoryStatus.PERMISSION_DENIED -> return MessageGroupDescriptor(
+                            R.string.accessory_permission_denied, R.string.empty, null)
+
+                    AccessoryStatus.OPEN_FAILED -> return MessageGroupDescriptor(
+                            R.string.accessory_open_failed, R.string.empty, null)
                 }
 
-                return R.string.empty
+                return MessageGroupDescriptor(R.string.empty, R.string.empty, null)
             }
 
-            val message = Repositories.repositoryWithInitialValue(R.string.empty)
-                    .observe(plugStatus, accessoryStatus)
+            val messageGroup = Repositories.repositoryWithInitialValue(MessageGroupDescriptor(
+                                                        R.string.empty, R.string.empty, null))
+                    .observe(plugStatus, accessoryStatus, troubleshootStatus)
                     .onUpdatesPerLoop()
                     .getFrom(plugStatus)
                     .mergeIn(accessoryStatus, pairer())
-                    .thenTransform { messageResid(it.first, it.second) }
+                    .mergeIn(troubleshootStatus, tripler())
+                    .thenTransform { getDescriptor(it.first, it.second, it.third) }
                     .compile()
 
             // Control message text
-            link(message, textResidFollows(this@MainActivity, R.id.Message, message))
+            link(messageGroup, textResidFollows(this@MainActivity, R.id.Message, messageGroup) {
+                it.messageResid
+            })
+
+            // Control troubleshoot text and its behavior
+            link(messageGroup, Updatable {
+                val desc = messageGroup.get()
+                val tv = findViewById<TextView>(R.id.Troubleshoot)
+
+                tv.setText(desc.troubleshootResid)
+                desc.troubleshootOnClick?.let {
+                    tv.setOnClickListener(it)
+                }
+            })
 
             fun messageVisibilityValue(resid: Int, progress: Boolean) =
                     if (resid == R.string.empty || progress || hostMap != null) View.INVISIBLE else View.VISIBLE
 
             val messageVisibility = Repositories.repositoryWithInitialValue(View.INVISIBLE)
-                    .observe(message, inProgress)
+                    .observe(messageGroup, inProgress)
                     .onUpdatesPerLoop()
-                    .getFrom(message)
+                    .getFrom(messageGroup)
                     .mergeIn(inProgress, pairer())
-                    .thenTransform { messageVisibilityValue(it.first, it.second) }
+                    .thenTransform { messageVisibilityValue(it.first.messageResid, it.second) }
                     .compile()
 
             // Control message visibility
             link(messageVisibility, visibilityFollows(this@MainActivity, R.id.Message, messageVisibility))
+
+            val troubleshootVisibility = Repositories.repositoryWithInitialValue(View.INVISIBLE)
+                    .observe(messageGroup, inProgress)
+                    .onUpdatesPerLoop()
+                    .getFrom(messageGroup)
+                    .mergeIn(inProgress, pairer())
+                    .thenTransform { messageVisibilityValue(it.first.troubleshootResid, it.second) }
+                    .compile()
+
+            // Control troubleshoot visibility
+            link(troubleshootVisibility, visibilityFollows(this@MainActivity, R.id.Troubleshoot, troubleshootVisibility))
 
             // Trigger checking accessory on plugged
             link(plugStatus, Updatable {
@@ -311,6 +368,7 @@ class MainActivity : AppCompatActivity() {
         cancelAccessoryComingUpTimer()
         startAccessoryComingUpTimer()
 
+        troubleshootStatus.accept(TroubleshootStatus.NONE)
         contactStatus.accept(ContactStatus.NONE)
         expectingEndOfContact.accept(false)
 
@@ -355,6 +413,7 @@ class MainActivity : AppCompatActivity() {
     private fun accessoryOpened(p: Protocol, fd: ParcelFileDescriptor) {
         accessoryStatus.accept(AccessoryStatus.OPENED)
         contactStatus.accept(ContactStatus.DIALING)
+        troubleshootStatus.accept(TroubleshootStatus.NONE)
 
         closeAccessoryChannel()
 
@@ -373,6 +432,7 @@ class MainActivity : AppCompatActivity() {
         accessoryStatus.accept(AccessoryStatus.CLOSED)
         contactStatus.accept(ContactStatus.ENDED)
         expectingEndOfContact.accept(false)
+        troubleshootStatus.accept(TroubleshootStatus.NONE)
 
         closeAccessoryChannel()
         pendingChangeInterrupted()
@@ -382,6 +442,7 @@ class MainActivity : AppCompatActivity() {
         accessoryStatus.accept(AccessoryStatus.NONE)
         contactStatus.accept(ContactStatus.NONE)
         expectingEndOfContact.accept(false)
+        troubleshootStatus.accept(TroubleshootStatus.NONE)
 
         closeAccessoryChannel()
         pendingChangeInterrupted(clearHostDisplay())

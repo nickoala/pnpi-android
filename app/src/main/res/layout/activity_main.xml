@@ -59,15 +59,31 @@
         android:layout_marginStart="8dp"
         android:layout_marginTop="8dp"
         android:paddingEnd="32dp"
-        android:paddingRight="32dp"
         android:paddingStart="32dp"
         android:paddingLeft="32dp"
+        android:paddingRight="32dp"
         android:text="@string/placeholder"
         android:textAppearance="@style/TextAppearance.AppCompat.Large"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/Toolbar" />
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <TextView
+        android:id="@+id/Troubleshoot"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="36dp"
+        android:clickable="true"
+        android:paddingEnd="32dp"
+        android:paddingLeft="32dp"
+        android:paddingRight="32dp"
+        android:paddingStart="32dp"
+        android:text="@string/placeholder"
+        android:textAppearance="@style/TextAppearance.AppCompat.Medium"
+        android:textColor="?android:attr/textColorLink"
+        app:layout_constraintStart_toStartOf="@+id/Message"
+        app:layout_constraintTop_toBottomOf="@+id/Message" />
 
     <ProgressBar
         android:id="@+id/Progress"
