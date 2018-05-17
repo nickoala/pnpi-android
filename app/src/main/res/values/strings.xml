@@ -10,7 +10,8 @@
     <string name="accessory_permission_denied">You did not permit the app to talk to Raspberry Pi. Re-plug to try again.</string>
     <string name="accessory_open_failed">Failed to open device. Re-plug to try again.</string>
     <string name="server_is_enabled"><u>But I am sure it\'s enabled!</u></string>
-    <string name="restart_phone">For some reason, the phone is unable to detect Raspberry Pi. Re-plug, or re-start phone, to try again.</string>
+    <string name="restart_phone">Try removing all USB attachments to Raspberry Pi, then re-plug phone to Raspberry Pi.\n
+        \nIf that still fails, re-start phone and Raspberry Pi.</string>
     <string name="open_network">This is an open network. No passphrase is required.</string>
     <string name="host_halting">Raspberry Pi is shutting down</string>
     <string name="host_rebooting">Raspberry Pi is rebooting. Connection will be back up soon.</string>

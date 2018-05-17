@@ -562,11 +562,11 @@ class MainActivity : AppCompatActivity() {
                 val host = msg.obj as HostStates
                 val layout = findViewById<ViewGroup>(R.id.Host)
 
-                fun nameSource(n: NetworkInterface, existing: Source<NetworkInterface>?) =
-                        Pair(n.name, existing ?: Source(n))
+                fun propagateSource(n: NetworkInterface, map: Map<String, Source<NetworkInterface>>?) =
+                        Pair(n.name, map?.get(n.name)?.apply { base.accept(n) } ?: Source(n))
 
-                fun nameSource(s: Service, existing: Source<Service>?) =
-                        Pair(s.name, existing ?: Source(s))
+                fun propagateSource(s: Service, map: Map<String, Source<Service>>?) =
+                        Pair(s.name, map?.get(s.name)?.apply { base.accept(s) } ?: Source(s))
 
                 fun makeView(s: Source<NetworkInterface>): View {
                     val v = layoutInflater.inflate(R.layout.view_network_interface, layout, false)
@@ -747,7 +747,7 @@ class MainActivity : AppCompatActivity() {
                 // This has the effect of propagating existing states, including timer and
                 // and expectation function, which are important if change is pending.
                 val ifs = host.interfaces.map {
-                    nameSource(it, oldHostMap?.interfaces?.get(it.name))
+                    propagateSource(it, oldHostMap?.interfaces)
                 }
 
                 // Form new map: interface name -> source
@@ -760,7 +760,7 @@ class MainActivity : AppCompatActivity() {
 
                 // Form (name, source) pair. Re-use existing source if there is one.
                 val scs = host.services.map {
-                    nameSource(it, oldHostMap?.services?.get(it.name))
+                    propagateSource(it, oldHostMap?.services)
                 }
 
                 // Form new map: service name -> source
