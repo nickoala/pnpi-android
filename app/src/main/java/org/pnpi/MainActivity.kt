@@ -1,6 +1,9 @@
 package org.pnpi
 
 import android.app.Activity
+import android.app.AlertDialog
+import android.app.Dialog
+import android.app.DialogFragment
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -147,18 +150,46 @@ class MainActivity : AppCompatActivity() {
 
         // Power menu
         findViewById<View>(R.id.Power).setOnClickListener { view ->
+            class ConfirmShutdownFragment : DialogFragment() {
+                override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
+                    return AlertDialog.Builder(activity)
+                            .setMessage(R.string.confirm_halt)
+                            .setTitle("Confirm")
+                            .setPositiveButton("OK", { dialog, which ->
+                                AccessoryChannel.opened?.send(Command("halt"))
+                                expectEndOfContact()
+                                toast(R.string.host_halting)
+                            })
+                            .setNegativeButton("Cancel", { dialog, which ->
+                            })
+                            .create()
+                }
+            }
+
+            class ConfirmRebootFragment : DialogFragment() {
+                override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
+                    return AlertDialog.Builder(activity)
+                            .setMessage(R.string.confirm_reboot)
+                            .setTitle("Confirm")
+                            .setPositiveButton("OK", { dialog, which ->
+                                AccessoryChannel.opened?.send(Command("reboot"))
+                                expectEndOfContact()
+                                toast(R.string.host_rebooting)
+                            })
+                            .setNegativeButton("Cancel", { dialog, which ->
+                            })
+                            .create()
+                }
+            }
+
             PopupMenu(this@MainActivity, view).apply {
                 setOnMenuItemClickListener { item ->
                     when (item.itemId) {
                         R.id.shutdown -> {
-                            AccessoryChannel.opened?.send(Command("halt"))
-                            expectEndOfContact()
-                            toast(R.string.host_halting)
+                            ConfirmShutdownFragment().show(fragmentManager, "ConfirmShutdownDialog")
                         }
                         R.id.reboot -> {
-                            AccessoryChannel.opened?.send(Command("reboot"))
-                            expectEndOfContact()
-                            toast(R.string.host_rebooting)
+                            ConfirmRebootFragment().show(fragmentManager, "ConfirmRebootDialog")
                         }
                     }
                     true
