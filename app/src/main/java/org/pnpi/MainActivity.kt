@@ -54,7 +54,8 @@ enum class ContactStatus {
 
 enum class TroubleshootStatus {
     NONE,
-    NO_ACCESSORY_BUT_SERVER_IS_ENABLED
+    PLUG_UNDETECTED,
+    ACCESSORY_UNDETECTED
 }
 
 class AccessoryChannel private constructor(
@@ -109,7 +110,9 @@ class MainActivity : AppCompatActivity() {
     private object Timeout {
         const val SERVICE_SWITCH = 5500L
         const val HOTSPOT_CONNECT = 12000L
+        const val HOTSPOT_DISCONNECT = 5500L
         const val AWAIT_ACCESSORY = 30000L  // Give time for server to come up, when Pi is starting.
+        const val AWAIT_MORE_INFO = 9800L
     }
 
     private lateinit var accessoryFilter: AccessoryFilter
@@ -252,24 +255,31 @@ class MainActivity : AppCompatActivity() {
 
             fun getDescriptor(p: PlugStatus, a: AccessoryStatus, t: TroubleshootStatus):
                     MessageGroupDescriptor {
+                when (t) {
+                    TroubleshootStatus.PLUG_UNDETECTED -> return MessageGroupDescriptor(
+                            R.string.check_cable, R.string.empty, null)
+
+                    TroubleshootStatus.ACCESSORY_UNDETECTED -> return MessageGroupDescriptor(
+                            R.string.restart_phone, R.string.empty, null)
+                }
+
                 when (p) {
                     PlugStatus.NEVER -> return MessageGroupDescriptor(
-                            R.string.no_plug, R.string.empty, null)
+                            R.string.no_plug, R.string.pi_is_plugged, {
+                        troubleshootStatus.accept(TroubleshootStatus.PLUG_UNDETECTED)
+                    })
 
                     PlugStatus.UNPLUGGED -> return MessageGroupDescriptor(
-                            R.string.no_plug, R.string.empty, null)
+                            R.string.no_plug, R.string.pi_is_plugged, {
+                        troubleshootStatus.accept(TroubleshootStatus.PLUG_UNDETECTED)
+                    })
                 }
 
                 when (a) {
-                    AccessoryStatus.NONE -> return when (t) {
-                        TroubleshootStatus.NONE -> MessageGroupDescriptor(
-                                R.string.accessory_none, R.string.server_is_enabled, {
-                                    troubleshootStatus.accept(TroubleshootStatus.NO_ACCESSORY_BUT_SERVER_IS_ENABLED)
-                        })
-
-                        TroubleshootStatus.NO_ACCESSORY_BUT_SERVER_IS_ENABLED -> MessageGroupDescriptor(
-                                R.string.restart_phone, R.string.empty, null)
-                    }
+                    AccessoryStatus.NONE -> return MessageGroupDescriptor(
+                            R.string.accessory_none, R.string.server_is_enabled, {
+                        troubleshootStatus.accept(TroubleshootStatus.ACCESSORY_UNDETECTED)
+                    })
                     AccessoryStatus.UNRECOGNIZED -> return MessageGroupDescriptor(
                             R.string.accessory_unrecognized, R.string.empty, null)
 
@@ -534,7 +544,7 @@ class MainActivity : AppCompatActivity() {
             })
         }
 
-        fun changePending(exp: (T) -> Boolean, onTimeout: () -> Unit, millis: Long) {
+        fun changePending(exp: (T) -> Boolean, onTimeout: (T) -> Unit, millis: Long) {
             change.accept(Change.PENDING)
             expect = exp
 
@@ -545,7 +555,7 @@ class MainActivity : AppCompatActivity() {
                         genericHandler.post {
                             if (change.get() == Change.PENDING) {
                                 change.accept(Change.TIMED_OUT)
-                                onTimeout()
+                                onTimeout(base.get())
                             }
                         }
                     }
@@ -616,8 +626,28 @@ class MainActivity : AppCompatActivity() {
                             startHotspotActivity()
                         }
 
+                        class ConfirmDisconnectFragment : DialogFragment() {
+                            override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
+                                return AlertDialog.Builder(activity)
+                                        .setMessage("Disconnect from ${s.base.get().ssid}?")
+                                        .setTitle("Confirm")
+                                        .setPositiveButton("OK", { dialog, which ->
+                                            AccessoryChannel.opened?.send(Command("disconnect", s.base.get().ssid))
+                                            s.changePending({ networkInterface ->
+                                                networkInterface.ssid == ""
+                                                        && networkInterface.ips.isEmpty()
+                                            }, { _ ->
+                                                toast("Unable to disconnect")
+                                            }, Timeout.HOTSPOT_DISCONNECT)
+                                        })
+                                        .setNegativeButton("Cancel", { dialog, which ->
+                                        })
+                                        .create()
+                            }
+                        }
+
                         v.findViewById<View>(R.id.ipgroup).setOnClickListener { view ->
-                            startHotspotActivity()
+                            ConfirmDisconnectFragment().show(fragmentManager, "ConfirmDisconnectDialog")
                         }
                     }
 
@@ -651,13 +681,53 @@ class MainActivity : AppCompatActivity() {
                                 .thenTransform { it.ips.minus(pickPrimaryIP(it.ips)) }
                                 .compile()
 
+                        val primaryExists = Repositories.repositoryWithInitialValue(false)
+                                .observe(primarySet)
+                                .onUpdatesPerLoop()
+                                .getFrom(primarySet)
+                                .thenTransform { !it.isEmpty() }
+                                .compile()
+
+                        val moreInfoComingUp = Repositories.mutableRepository(false)
+
+                        fun secondaryTextString(addrs: Set<InetAddress>, more: Boolean) =
+                                if (!more || !addrs.isEmpty()) {
+                                    addrs.map { it.hostAddress }.sorted().joinToString("\n")
+                                }
+                                else {
+                                    "more info coming up"
+                                }
+
+                        val secondaryText = Repositories.repositoryWithInitialValue("")
+                                .observe(secondarySet, moreInfoComingUp)
+                                .onUpdatesPerLoop()
+                                .getFrom(secondarySet)
+                                .mergeIn(moreInfoComingUp, pairer())
+                                .thenTransform { secondaryTextString(it.first, it.second) }
+                                .compile()
+
+                        // Trigger "more info coming up" when primary IP becomes present
+                        link(primaryExists, Updatable {
+                            if (primaryExists.get()) {
+                                moreInfoComingUp.accept(true)
+
+                                Timer().apply {
+                                    schedule(object : TimerTask() {
+                                        override fun run() {
+                                            genericHandler.post {
+                                                moreInfoComingUp.accept(false)
+                                            }
+                                        }
+                                    }, Timeout.AWAIT_MORE_INFO)
+                                }
+                            }
+                        })
+
                         link(primarySet, textFollows(v, R.id.primary, primarySet) {
                             it.firstOrNull()?.hostAddress ?: "No IP address"
                         })
 
-                        link(secondarySet, textFollows(v, R.id.secondary, secondarySet) {
-                            it.map { it.hostAddress }.sorted().joinToString("\n")
-                        })
+                        link(secondaryText, textFollows(v, R.id.secondary, secondaryText))
 
                         link(primarySet, Updatable {
                             val ip = primarySet.get().firstOrNull()
@@ -734,8 +804,8 @@ class MainActivity : AppCompatActivity() {
 
                         s.changePending({ service ->
                             service.running == checked
-                        }, {
-                            toast("Failed to $switch ${s.base.get().name}")
+                        }, { service ->
+                            toast("Unable to $switch ${service.name}")
                         }, Timeout.SERVICE_SWITCH)
 
                         AccessoryChannel.opened?.send(Command(action, s.base.get().name))
@@ -846,8 +916,13 @@ class MainActivity : AppCompatActivity() {
                                     ?.changePending({ networkInterface ->
                                         networkInterface.ssid == resultData.ssid
                                                 && !networkInterface.ips.isEmpty()
-                                    }, {
-                                        toast("Failed to connect ${resultData.ssid}")
+                                    }, { networkInterface ->
+                                        if (networkInterface.ssid == "") {
+                                            toast("Unable to connect ${resultData.ssid}")
+                                        }
+                                        else {
+                                            toast("Unable to connect ${resultData.ssid}. Use ${networkInterface.ssid} instead.")
+                                        }
                                     }, Timeout.HOTSPOT_CONNECT)
 
                             AccessoryChannel.opened?.send(Command(
