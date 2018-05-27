@@ -13,9 +13,10 @@
     <string name="server_is_enabled"><u>But I\'m sure it\'s enabled!</u></string>
     <string name="check_cable">Is the phone charging?\n
         \nIf not, make sure Raspberry Pi is powered on and USB cable is fully plugged in.\n
-        \nIf the phone is charging, the USB cable may not have a data connection. Use one that has data wires.
+        \nIf phone is charging, the USB cable may not have a data connection. Use one that has data wires.\n
+        \nIt is also possible that Raspberry Pi is under-voltage and is straining to supply power to the phone. Try a better power adapter.
     </string>
-    <string name="restart_phone">Try removing all USB attachments to Raspberry Pi, then re-plug phone to Raspberry Pi.\n
+    <string name="restart_phone">Try removing all USB attachments from Raspberry Pi, then re-plug phone to Raspberry Pi.\n
         \nIf that still fails, re-start phone and Raspberry Pi to try again.</string>
     <string name="no_hotspot">No hotspot is found</string>
     <string name="open_network">This is an open network. No passphrase is required.</string>

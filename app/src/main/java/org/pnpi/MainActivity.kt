@@ -249,6 +249,7 @@ class MainActivity : AppCompatActivity() {
 
             data class MessageGroupDescriptor(
                     val messageResid: Int,
+                    val messageFontSizeSp: Float,
                     val troubleshootResid: Int,
                     val troubleshootOnClick: ((View) -> Unit)?
             )
@@ -257,47 +258,47 @@ class MainActivity : AppCompatActivity() {
                     MessageGroupDescriptor {
                 when (t) {
                     TroubleshootStatus.PLUG_UNDETECTED -> return MessageGroupDescriptor(
-                            R.string.check_cable, R.string.empty, null)
+                            R.string.check_cable, 18f, R.string.empty, null)
 
                     TroubleshootStatus.ACCESSORY_UNDETECTED -> return MessageGroupDescriptor(
-                            R.string.restart_phone, R.string.empty, null)
+                            R.string.restart_phone, 18f, R.string.empty, null)
                 }
 
                 when (p) {
                     PlugStatus.NEVER -> return MessageGroupDescriptor(
-                            R.string.no_plug, R.string.pi_is_plugged, {
+                            R.string.no_plug, 22f, R.string.pi_is_plugged, {
                         troubleshootStatus.accept(TroubleshootStatus.PLUG_UNDETECTED)
                     })
 
                     PlugStatus.UNPLUGGED -> return MessageGroupDescriptor(
-                            R.string.no_plug, R.string.pi_is_plugged, {
+                            R.string.no_plug, 22f, R.string.pi_is_plugged, {
                         troubleshootStatus.accept(TroubleshootStatus.PLUG_UNDETECTED)
                     })
                 }
 
                 when (a) {
                     AccessoryStatus.NONE -> return MessageGroupDescriptor(
-                            R.string.accessory_none, R.string.server_is_enabled, {
+                            R.string.accessory_none, 22f, R.string.server_is_enabled, {
                         troubleshootStatus.accept(TroubleshootStatus.ACCESSORY_UNDETECTED)
                     })
                     AccessoryStatus.UNRECOGNIZED -> return MessageGroupDescriptor(
-                            R.string.accessory_unrecognized, R.string.empty, null)
+                            R.string.accessory_unrecognized, 22f, R.string.empty, null)
 
                     AccessoryStatus.VERSION_UNSUPPORTED -> return MessageGroupDescriptor(
-                            R.string.accessory_version_unsupported, R.string.empty, null)
+                            R.string.accessory_version_unsupported, 22f, R.string.empty, null)
 
                     AccessoryStatus.PERMISSION_DENIED -> return MessageGroupDescriptor(
-                            R.string.accessory_permission_denied, R.string.empty, null)
+                            R.string.accessory_permission_denied, 22f, R.string.empty, null)
 
                     AccessoryStatus.OPEN_FAILED -> return MessageGroupDescriptor(
-                            R.string.accessory_open_failed, R.string.empty, null)
+                            R.string.accessory_open_failed, 22f, R.string.empty, null)
                 }
 
-                return MessageGroupDescriptor(R.string.empty, R.string.empty, null)
+                return MessageGroupDescriptor(R.string.empty, 22f, R.string.empty, null)
             }
 
             val messageGroup = Repositories.repositoryWithInitialValue(MessageGroupDescriptor(
-                                                        R.string.empty, R.string.empty, null))
+                                                        R.string.empty, 22f, R.string.empty, null))
                     .observe(plugStatus, accessoryStatus, troubleshootStatus)
                     .onUpdatesPerLoop()
                     .getFrom(plugStatus)
@@ -307,8 +308,12 @@ class MainActivity : AppCompatActivity() {
                     .compile()
 
             // Control message text
-            link(messageGroup, textResidFollows(this@MainActivity, R.id.Message, messageGroup) {
-                it.messageResid
+            link(messageGroup, Updatable {
+                val desc = messageGroup.get()
+                val tv = findViewById<TextView>(R.id.Message)
+
+                tv.setText(desc.messageResid)
+                tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, desc.messageFontSizeSp)
             })
 
             // Control troubleshoot text and its behavior
