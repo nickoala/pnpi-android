@@ -3,21 +3,25 @@
     <string name="empty"></string>
     <string name="placeholder">text</string>
     <string name="connected">Connected</string>
+
     <string name="no_plug">Plug in Raspberry Pi via USB</string>
-    <string name="accessory_none">Plug n Pi seems not running on Raspberry Pi. Please enable it.</string>
+    <string name="accessory_none">This app requires Plug n Pi Server enabled on Raspberry Pi. Please enable it.</string>
     <string name="accessory_unrecognized">Incompatible device</string>
     <string name="accessory_version_unsupported">The app does not support the version of protocol used by Raspberry Pi. Please update the app.</string>
     <string name="accessory_permission_denied">You did not permit the app to talk to Raspberry Pi. Re-plug to try again.</string>
     <string name="accessory_open_failed">Unable to connect Raspberry Pi. Re-plug to try again.</string>
+    <string name="dialing_timed_out">Unable to establish contact with Raspberry Pi. Re-plug to try again.</string>
+
     <string name="pi_is_plugged"><u>But I\'m sure it\'s plugged in!</u></string>
     <string name="server_is_enabled"><u>But I\'m sure it\'s enabled!</u></string>
     <string name="check_cable">Is the phone charging?\n
         \nIf not, make sure Raspberry Pi is powered on and USB cable is fully plugged in.\n
         \nIf phone is charging, the USB cable may not have a data connection. Use one that has data wires.\n
-        \nIt is also possible that Raspberry Pi is under-voltage and is straining to supply power to the phone. Try a better power adapter.
+        \nIt is also possible that Raspberry Pi is under-voltage and cannot detect the phone properly. Try a better power adapter and a better power cable.
     </string>
     <string name="restart_phone">Try removing all USB attachments from Raspberry Pi, then re-plug phone to Raspberry Pi.\n
         \nIf that still fails, re-start phone and Raspberry Pi to try again.</string>
+
     <string name="no_hotspot">No hotspot is found</string>
     <string name="open_network">This is an open network. No passphrase is required.</string>
     <string name="confirm_halt">Raspberry Pi will shut down</string>

@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 
 <resources>
-    <usb-accessory model="PnPi Server" manufacturer="Nick Lee of Hong Kong" />
+    <usb-accessory model="Plug n Pi Server" manufacturer="Nick Lee of Hong Kong" />
 </resources>

@@ -22,7 +22,9 @@ class Protocol : org.pnpi.protocol.Protocol() {
     private fun patience(): Long =
             when {
                 systemStarted -> 4500
-                scanStarted -> 8100
+                scanStarted -> 15500  // Scan result may be delayed by one period
+                                      // because server does not trust the first empty result.
+                                      // So, it should include two scan periods, plus margin.
                 else -> 0
             }
 

@@ -12,6 +12,7 @@ import android.hardware.usb.UsbManager
 import android.os.Bundle
 import android.os.Handler
 import android.os.ParcelFileDescriptor
+import android.os.SystemClock
 import android.support.v7.app.AppCompatActivity
 import android.util.TypedValue
 import android.view.View
@@ -47,6 +48,7 @@ enum class AccessoryStatus {
 enum class ContactStatus {
     NONE,
     DIALING,
+    TIMED_OUT,
     SILENT,
     COMMUNICATING,
     ENDED
@@ -112,6 +114,7 @@ class MainActivity : AppCompatActivity() {
         const val HOTSPOT_CONNECT = 12000L
         const val HOTSPOT_DISCONNECT = 5500L
         const val AWAIT_ACCESSORY = 30000L  // Give time for server to come up, when Pi is starting.
+        const val AWAIT_DIALING = 8100L
         const val AWAIT_MORE_INFO = 9800L
     }
 
@@ -141,6 +144,8 @@ class MainActivity : AppCompatActivity() {
 
     private val accessoryComingUp = Repositories.mutableRepository(false)
     private var accessoryComingUpTimer: Timer? = null
+
+    private var dialingTimer: Timer? = null
 
     private val mainReactor = Reactor()
 
@@ -254,7 +259,7 @@ class MainActivity : AppCompatActivity() {
                     val troubleshootOnClick: ((View) -> Unit)?
             )
 
-            fun getDescriptor(p: PlugStatus, a: AccessoryStatus, t: TroubleshootStatus):
+            fun getDescriptor(p: PlugStatus, a: AccessoryStatus, t: TroubleshootStatus, c: ContactStatus):
                     MessageGroupDescriptor {
                 when (t) {
                     TroubleshootStatus.PLUG_UNDETECTED -> return MessageGroupDescriptor(
@@ -294,17 +299,25 @@ class MainActivity : AppCompatActivity() {
                             R.string.accessory_open_failed, 22f, R.string.empty, null)
                 }
 
+                when (c) {
+                    ContactStatus.TIMED_OUT -> return MessageGroupDescriptor(
+                            R.string.dialing_timed_out, 22f, R.string.empty, null)
+                }
+
                 return MessageGroupDescriptor(R.string.empty, 22f, R.string.empty, null)
             }
 
             val messageGroup = Repositories.repositoryWithInitialValue(MessageGroupDescriptor(
                                                         R.string.empty, 22f, R.string.empty, null))
-                    .observe(plugStatus, accessoryStatus, troubleshootStatus)
+                    .observe(plugStatus, accessoryStatus, troubleshootStatus, contactStatus)
                     .onUpdatesPerLoop()
                     .getFrom(plugStatus)
                     .mergeIn(accessoryStatus, pairer())
                     .mergeIn(troubleshootStatus, tripler())
-                    .thenTransform { getDescriptor(it.first, it.second, it.third) }
+                    .mergeIn(contactStatus, pairer())
+                    .thenTransform {
+                        getDescriptor(it.first.first, it.first.second, it.first.third, it.second)
+                    }
                     .compile()
 
             // Control message text
@@ -371,6 +384,13 @@ class MainActivity : AppCompatActivity() {
             link(accessoryStatus, Updatable {
                 if (accessoryStatus.get() != AccessoryStatus.NONE) {
                     cancelAccessoryComingUpTimer()
+                }
+            })
+
+            // Cancel dialing timer when contact status changes
+            link(contactStatus, Updatable {
+                if (contactStatus.get() !in setOf(ContactStatus.DIALING, ContactStatus.TIMED_OUT)) {
+                    cancelDialingTimer()
                 }
             })
         }
@@ -456,10 +476,31 @@ class MainActivity : AppCompatActivity() {
         AccessoryChannel.opened?.close()
     }
 
+    private fun startDialing() {
+        contactStatus.accept(ContactStatus.DIALING)
+        dialingTimer = Timer().apply {
+            schedule(object : TimerTask() {
+                override fun run() {
+                    genericHandler.post {
+                        contactStatus.accept(ContactStatus.TIMED_OUT)
+                        cancelDialingTimer()
+                    }
+                }
+            }, Timeout.AWAIT_DIALING)
+        }
+    }
+
+    private fun cancelDialingTimer() {
+        dialingTimer?.cancel()
+        dialingTimer = null
+    }
+
     private fun accessoryOpened(p: Protocol, fd: ParcelFileDescriptor) {
         accessoryStatus.accept(AccessoryStatus.OPENED)
-        contactStatus.accept(ContactStatus.DIALING)
         troubleshootStatus.accept(TroubleshootStatus.NONE)
+
+        cancelDialingTimer()
+        startDialing()
 
         closeAccessoryChannel()
 
@@ -973,6 +1014,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         cancelAccessoryComingUpTimer()
+        cancelDialingTimer()
         pendingChangeInterrupted()
 
         unregisterReceiver(receiver)
