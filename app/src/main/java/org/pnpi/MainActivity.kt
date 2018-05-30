@@ -115,7 +115,7 @@ class MainActivity : AppCompatActivity() {
         const val HOTSPOT_DISCONNECT = 5500L
         const val AWAIT_ACCESSORY = 30000L  // Give time for server to come up, when Pi is starting.
         const val AWAIT_DIALING = 8100L
-        const val AWAIT_MORE_INFO = 9800L
+        const val AWAIT_MORE_INFO = 16600L
     }
 
     private lateinit var accessoryFilter: AccessoryFilter
