@@ -12,7 +12,6 @@ import android.hardware.usb.UsbManager
 import android.os.Bundle
 import android.os.Handler
 import android.os.ParcelFileDescriptor
-import android.os.SystemClock
 import android.support.v7.app.AppCompatActivity
 import android.util.TypedValue
 import android.view.View
@@ -512,7 +511,8 @@ class MainActivity : AppCompatActivity() {
 
     private fun expectEndOfContact() {
         expectingEndOfContact.accept(true)
-        pendingChangeInterrupted()
+        interruptPendingChanges()
+        stopTemporaryActions()
     }
 
     private fun endContact() {
@@ -522,7 +522,8 @@ class MainActivity : AppCompatActivity() {
         troubleshootStatus.accept(TroubleshootStatus.NONE)
 
         closeAccessoryChannel()
-        pendingChangeInterrupted()
+        interruptPendingChanges()
+        stopTemporaryActions()
     }
 
     private fun clearHistory() {
@@ -532,7 +533,11 @@ class MainActivity : AppCompatActivity() {
         troubleshootStatus.accept(TroubleshootStatus.NONE)
 
         closeAccessoryChannel()
-        pendingChangeInterrupted(clearHostDisplay())
+
+        clearHostDisplay()?.let {
+            interruptPendingChanges(it)
+            stopTemporaryActions(it)
+        }
     }
 
     private fun clearHostDisplay(): HostMap? {
@@ -546,18 +551,32 @@ class MainActivity : AppCompatActivity() {
         return old
     }
 
-    private fun <T> pendingChangeInterrupted(m: Map<String, Source<T>>) =
-            m.values.forEach { it.pendingChangeInterrupted() }
+    private fun <T> interruptPendingChanges(m: Map<String, Source<T>>) =
+            m.values.forEach { it.interruptPendingChange() }
 
-    private fun pendingChangeInterrupted(m: HostMap?) {
+    private fun interruptPendingChanges(m: HostMap?) {
         m?.let {
-            pendingChangeInterrupted(it.interfaces)
-            pendingChangeInterrupted(it.services)
+            interruptPendingChanges(it.interfaces)
+            interruptPendingChanges(it.services)
         }
     }
 
-    private fun pendingChangeInterrupted() {
-        pendingChangeInterrupted(hostMap)
+    private fun interruptPendingChanges() {
+        interruptPendingChanges(hostMap)
+    }
+
+    private fun <T> stopTemporaryActions(m: Map<String, Source<T>>) =
+            m.values.forEach { it.stopTemporaryAction() }
+
+    private fun stopTemporaryActions(m: HostMap?) {
+        m?.let {
+            stopTemporaryActions(it.interfaces)
+            stopTemporaryActions(it.services)
+        }
+    }
+
+    private fun stopTemporaryActions() {
+        stopTemporaryActions(hostMap)
     }
 
     private enum class Change {
@@ -609,10 +628,37 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        fun pendingChangeInterrupted() {
+        fun interruptPendingChange() {
             if (change.get() == Change.PENDING) {
                 change.accept(Change.INTERRUPTED)
             }
+        }
+
+        private var actionTimer: Timer? = null
+        private var restoringAction: (() -> Unit)? = null
+
+        fun startTemporaryAction(action: () -> Unit, millis: Long, restore: () -> Unit) {
+            stopTemporaryAction()
+            action()
+
+            restoringAction = restore
+            actionTimer = Timer().apply {
+                schedule(object : TimerTask() {
+                    override fun run() {
+                        genericHandler.post {
+                            stopTemporaryAction()
+                        }
+                    }
+                }, millis)
+            }
+        }
+
+        fun stopTemporaryAction() {
+            actionTimer?.cancel()
+            actionTimer = null
+
+            restoringAction?.let { it() }
+            restoringAction = null
         }
     }
 
@@ -720,6 +766,13 @@ class MainActivity : AppCompatActivity() {
                                 .thenTransform { pickPrimaryIP(it.ips) }
                                 .compile()
 
+                        val primaryExists = Repositories.repositoryWithInitialValue(false)
+                                .observe(primarySet)
+                                .onUpdatesPerLoop()
+                                .getFrom(primarySet)
+                                .thenTransform { !it.isEmpty() }
+                                .compile()
+
                         val secondarySet = Repositories.repositoryWithInitialValue(setOf<InetAddress>())
                                 .observe(s.base)
                                 .onUpdatesPerLoop()
@@ -727,10 +780,10 @@ class MainActivity : AppCompatActivity() {
                                 .thenTransform { it.ips.minus(pickPrimaryIP(it.ips)) }
                                 .compile()
 
-                        val primaryExists = Repositories.repositoryWithInitialValue(false)
-                                .observe(primarySet)
+                        val secondaryExists = Repositories.repositoryWithInitialValue(false)
+                                .observe(secondarySet)
                                 .onUpdatesPerLoop()
-                                .getFrom(primarySet)
+                                .getFrom(secondarySet)
                                 .thenTransform { !it.isEmpty() }
                                 .compile()
 
@@ -755,17 +808,20 @@ class MainActivity : AppCompatActivity() {
                         // Trigger "more info coming up" when primary IP becomes present
                         link(primaryExists, Updatable {
                             if (primaryExists.get()) {
-                                moreInfoComingUp.accept(true)
+                                s.startTemporaryAction({
+                                    moreInfoComingUp.accept(true)
+                                }, Timeout.AWAIT_MORE_INFO, {
+                                    moreInfoComingUp.accept(false)
+                                })
+                            } else {
+                                s.stopTemporaryAction()
+                            }
+                        })
 
-                                Timer().apply {
-                                    schedule(object : TimerTask() {
-                                        override fun run() {
-                                            genericHandler.post {
-                                                moreInfoComingUp.accept(false)
-                                            }
-                                        }
-                                    }, Timeout.AWAIT_MORE_INFO)
-                                }
+                        // Clear "more info coming up" when some secondary IPs become present
+                        link(secondaryExists, Updatable {
+                            if (secondaryExists.get()) {
+                                s.stopTemporaryAction()
                             }
                         })
 
@@ -920,8 +976,15 @@ class MainActivity : AppCompatActivity() {
 
                 // Interrupt those changes not in new sets
                 oldHostMap?.let {
-                    pendingChangeInterrupted(it.interfaces.minus(interfaceMap.keys))
-                    pendingChangeInterrupted(it.services.minus(serviceMap.keys))
+                    it.interfaces.minus(interfaceMap.keys).let {
+                        interruptPendingChanges(it)
+                        stopTemporaryActions(it)
+                    }
+
+                    it.services.minus(serviceMap.keys).let {
+                        interruptPendingChanges(it)
+                        stopTemporaryActions(it)
+                    }
                 }
 
                 hostMap = HostMap(interfaceMap, serviceMap)
@@ -1015,7 +1078,8 @@ class MainActivity : AppCompatActivity() {
 
         cancelAccessoryComingUpTimer()
         cancelDialingTimer()
-        pendingChangeInterrupted()
+        interruptPendingChanges()
+        stopTemporaryActions()
 
         unregisterReceiver(receiver)
         hostReactor?.deactivate()
