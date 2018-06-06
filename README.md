@@ -18,7 +18,7 @@ Plug n Pi's software consists of two parts:
 1. On the Pi side, there is the [USB server](https://github.com/nickoala/pnpi).
 
 2. On the Phone side, there is the USB client. This page concerns the client.
-   The app is available only on Android. It has been tested on the following 
+   The app is available only on Android. It has been tested on the following
    devices:
 
 |          Model         | Android version | API level |
@@ -28,4 +28,5 @@ Plug n Pi's software consists of two parts:
 | Samsung Galaxy S4      |           5.0.1 |        21 |
 | Samsung Tab A          |           7.1.1 |        25 |
 
-See the **[Plug n Pi Server](https://github.com/nickoala/pnpi)** page for more info.
+See the **[Plug n Pi Server](https://github.com/nickoala/pnpi)** page for more
+info.
