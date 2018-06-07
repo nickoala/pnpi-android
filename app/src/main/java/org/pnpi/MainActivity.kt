@@ -110,8 +110,8 @@ class MainActivity : AppCompatActivity() {
 
     private object Timeout {
         const val SERVICE_SWITCH = 5500L
-        const val HOTSPOT_CONNECT = 12000L
-        const val HOTSPOT_DISCONNECT = 5500L
+        const val HOTSPOT_CONNECT = 18000L
+        const val HOTSPOT_DISCONNECT = 6500L
         const val AWAIT_ACCESSORY = 30000L  // Give time for server to come up, when Pi is starting.
         const val AWAIT_DIALING = 8100L
         const val AWAIT_MORE_INFO = 16600L
