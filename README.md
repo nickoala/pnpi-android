@@ -1,5 +1,7 @@
 # Plug n Pi
 
+<a href='http://play.google.com/store/apps/details?id=org.pnpi&pcampaignid=MKT-Other-global-all-co-prtnr-py-PartBadge-Mar2515-1'><img align='right' width='333' alt='Get it on Google Play' src='https://play.google.com/intl/en_us/badges/images/generic/en_badge_web_generic.png'/></a>
+
 1. USB-connect a Raspberry Pi and a Mobile Phone
 
 2. The Phone's app pops up, allows you to:
