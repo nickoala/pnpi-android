@@ -19,6 +19,7 @@ import com.google.android.agera.Updatable
 import org.pnpi.protocol.Command
 import org.pnpi.protocol.Hotspot
 import org.pnpi.protocol.Protocol
+import org.pnpi.protocol.ScanResult
 
 fun wifiSignalGrade(dBm: Int): Int =
         when {
@@ -104,6 +105,22 @@ class HotspotActivity : AppCompatActivity() {
 
         setSupportActionBar(findViewById(R.id.Toolbar))
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
+
+        class PickCountryFragment : DialogFragment() {
+            override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
+                val cs = Available.countriesSorted
+                return AlertDialog.Builder(activity)
+                        .setTitle(R.string.pick_country_dialog_brief_title)
+                        .setItems(cs.map { it.name }.toTypedArray(), { dialog, which ->
+                            AccessoryChannel.opened?.send(Command("country", cs[which].code))
+                        })
+                        .create()
+            }
+        }
+
+        findViewById<View>(R.id.Countries).setOnClickListener { view ->
+            PickCountryFragment().show(fragmentManager, "PickCountryDialog")
+        }
 
         findViewById<ListView>(R.id.Hotspots).setAdapter(hotspotAdapter)
 
@@ -241,10 +258,10 @@ class HotspotActivity : AppCompatActivity() {
                 setResult(RESULT_END_CONTACT)
                 finish()
             }
-            Protocol.Event.HOTSPOTS -> {
+            Protocol.Event.SCAN_RESULT -> {
                 waiting.accept(false)
 
-                val hs = msg.obj as Set<Hotspot>
+                val hs = (msg.obj as ScanResult).hotspots
                 hotspotAdapter.hotspots = hs.sortedByDescending { it.signal }
                 hotspotAdapter.notifyDataSetChanged()
 

@@ -24,12 +24,30 @@ data class Service(
 
 data class HostStates(
         val interfaces: Set<NetworkInterface>,
-        val services: Set<Service>)
+        val services: Set<Service>,
+        val wifiCountryCode: String)
+
+data class HostStatesChange(
+        val interfaces: Set<NetworkInterface>,
+        val services: Set<Service>,
+        val wifiCountryCode: String)
+
+class HostNoChange
 
 data class Hotspot(
         val ssid: String,
         val open: Boolean,
         val signal: Int)
+
+data class ScanResult(
+        val hotspots: Set<Hotspot>)
+
+data class Country(
+        val code: String,
+        val name: String)
+
+data class HostChoices(
+        val countries: Set<Country>)
 
 data class Command(
         val action: String,
@@ -57,15 +75,24 @@ class SendTask(val output: OutputStream, val transform: (Command) -> ByteArray)
 }
 
 abstract class Protocol {
+    enum class SupportLevel {
+        TOO_OLD, SUPPORTED, TOO_NEW
+    }
+
     companion object {
-        private val supportedVersionSet = setOf("1")
+        private val minVersion = 2
+        private val maxVersion = 2
 
-        fun versionIsSupported(version: String): Boolean =
-                supportedVersionSet.contains(version)
+        fun checkVersion(version: Int): SupportLevel =
+                when {
+                    version < minVersion -> SupportLevel.TOO_OLD
+                    version > maxVersion -> SupportLevel.TOO_NEW
+                    else -> SupportLevel.SUPPORTED
+                }
 
-        fun get(version: String): Protocol =
+        fun get(version: Int): Protocol =
                 when (version) {
-                    "1" -> org.pnpi.protocol.v1.Protocol()
+                    2 -> org.pnpi.protocol.v2.Protocol()
                     else -> throw IllegalArgumentException("Invalid protocol version")
                 }
     }
@@ -119,11 +146,14 @@ abstract class Protocol {
         const val IN_CONTACT = 2
         const val EXCEPTION = 3
         const val END_CONTACT = 4
+
         const val RAW = 101
-        const val HOST_STATES = 201
-        const val NETWORK_INTERFACE = 202
-        const val SERVICE = 203
-        const val HOTSPOTS = 204
+
+        const val HOST_CHOICES = 201
+        const val HOST_STATES = 202
+        const val HOST_STATES_CHANGE = 203
+        const val HOST_NO_CHANGE = 204
+        const val SCAN_RESULT = 205
     }
 
     inner class ContactMonitor {

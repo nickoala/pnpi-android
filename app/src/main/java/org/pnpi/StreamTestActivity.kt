@@ -15,7 +15,7 @@ import org.pnpi.protocol.Command
 import org.pnpi.protocol.Protocol
 import org.pnpi.protocol.fill
 import org.pnpi.protocol.tell
-import org.pnpi.protocol.v1.toBytes
+import org.pnpi.protocol.v2.toBytes
 import java.lang.IllegalStateException
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -62,7 +62,7 @@ private class ProtocolRaw : Protocol() {
 
         Thread {
             try {
-                send(Command("system", listOf("start")))
+                send(Command("monitor", listOf("start")))
 
                 while (true) {
                     val bytes = readRawData()
@@ -116,10 +116,10 @@ class StreamTestActivity : AppCompatActivity() {
             return
         }
 
-        if (!Protocol.versionIsSupported(acc.version)) {
-            display.text = "Accessory version is not supported"
-            return
-        }
+//        if (!Protocol.versionIsSupported(acc.version)) {
+//            display.text = "Accessory version is not supported"
+//            return
+//        }
 
         if (!manager.hasPermission(acc)) {
             display.text = "You did not grant permission"
@@ -171,7 +171,7 @@ class StreamTestActivity : AppCompatActivity() {
         }
         else {
             accessoryChannel?.let {
-                it.send(Command("system", "start"))
+                it.send(Command("monitor", "start"))
             }
         }
     }
@@ -216,7 +216,7 @@ class StreamTestActivity : AppCompatActivity() {
 
 // If I do this:
         accessoryChannel?.let {
-            it.send(Command("system", listOf("stop")))
+            it.send(Command("monitor", listOf("stop")))
         }
 // Remember: Should not re-init usbChannel in onResume(), if usbChannel is present.
 // Client side: After pressing 'Home' to leave app and coming back in, continue update.

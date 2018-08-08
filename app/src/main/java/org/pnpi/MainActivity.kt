@@ -37,7 +37,8 @@ enum class PlugStatus {
 enum class AccessoryStatus {
     NONE,
     UNRECOGNIZED,
-    VERSION_UNSUPPORTED,
+    VERSION_TOO_OLD,
+    VERSION_TOO_NEW,
     PERMISSION_DENIED,
     OPEN_FAILED,
     OPENED,
@@ -100,6 +101,18 @@ class AccessoryChannel private constructor(
         catch (x: Exception) {}
 
         opened = null
+    }
+}
+
+class Available {
+    companion object {
+        var countriesSorted: List<Country> = listOf()
+
+        var countries: Set<Country> = setOf()
+            set(value) {
+                field = value
+                countriesSorted = value.sortedBy { it.name }
+            }
     }
 }
 
@@ -288,8 +301,11 @@ class MainActivity : AppCompatActivity() {
                     AccessoryStatus.UNRECOGNIZED -> return MessageGroupDescriptor(
                             R.string.accessory_unrecognized, 22f, R.string.empty, null)
 
-                    AccessoryStatus.VERSION_UNSUPPORTED -> return MessageGroupDescriptor(
-                            R.string.accessory_version_unsupported, 22f, R.string.empty, null)
+                    AccessoryStatus.VERSION_TOO_OLD -> return MessageGroupDescriptor(
+                            R.string.accessory_version_too_old, 22f, R.string.empty, null)
+
+                    AccessoryStatus.VERSION_TOO_NEW -> return MessageGroupDescriptor(
+                            R.string.accessory_version_too_new, 22f, R.string.empty, null)
 
                     AccessoryStatus.PERMISSION_DENIED -> return MessageGroupDescriptor(
                             R.string.accessory_permission_denied, 22f, R.string.empty, null)
@@ -451,9 +467,23 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
-        if (!Protocol.versionIsSupported(acc.version)) {
-            accessoryStatus.accept(AccessoryStatus.VERSION_UNSUPPORTED)
+        val protocolVersionNumber = try {
+            acc.version.toInt()
+        }
+        catch (x: NumberFormatException) {
+            accessoryStatus.accept(AccessoryStatus.UNRECOGNIZED)
             return
+        }
+
+        when (Protocol.checkVersion(protocolVersionNumber)) {
+            Protocol.SupportLevel.TOO_OLD -> {
+                accessoryStatus.accept(AccessoryStatus.VERSION_TOO_OLD)
+                return
+            }
+            Protocol.SupportLevel.TOO_NEW -> {
+                accessoryStatus.accept(AccessoryStatus.VERSION_TOO_NEW)
+                return
+            }
         }
 
         if (!manager.hasPermission(acc)) {
@@ -468,7 +498,7 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
-        accessoryOpened(Protocol.get(acc.version), fd)
+        accessoryOpened(Protocol.get(protocolVersionNumber), fd)
     }
 
     private fun closeAccessoryChannel() {
@@ -662,6 +692,8 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private var hostWifiCountryCode: String? = null
+
     private data class HostMap(
             val interfaces: Map<String, Source<NetworkInterface>>,
             val services: Map<String, Source<Service>>)
@@ -695,6 +727,8 @@ class MainActivity : AppCompatActivity() {
                 val host = msg.obj as HostStates
                 val layout = findViewById<ViewGroup>(R.id.Host)
 
+                hostWifiCountryCode = host.wifiCountryCode
+
                 fun propagateSource(n: NetworkInterface, map: Map<String, Source<NetworkInterface>>?) =
                         Pair(n.name, map?.get(n.name)?.apply { base.accept(n) } ?: Source(n))
 
@@ -714,8 +748,26 @@ class MainActivity : AppCompatActivity() {
                                     }, PICK_HOTSPOT_REQUEST)
                         }
 
+                        class PickCountryFragment : DialogFragment() {
+                            override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
+                                val cs = Available.countriesSorted
+                                return AlertDialog.Builder(activity)
+                                        .setTitle(R.string.pick_country_dialog_title)
+                                        .setItems(cs.map { it.name }.toTypedArray(), { dialog, which ->
+                                            AccessoryChannel.opened?.send(Command("country", cs[which].code))
+                                            startHotspotActivity()
+                                        })
+                                        .create()
+                            }
+                        }
+
                         v.findViewById<Button>(R.id.connect).setOnClickListener { view ->
-                            startHotspotActivity()
+                            if (hostWifiCountryCode == null || hostWifiCountryCode == "") {
+                                PickCountryFragment().show(fragmentManager, "PickCountryDialog")
+                            }
+                            else {
+                                startHotspotActivity()
+                            }
                         }
 
                         class ConfirmDisconnectFragment : DialogFragment() {
@@ -990,17 +1042,25 @@ class MainActivity : AppCompatActivity() {
                 hostMap = HostMap(interfaceMap, serviceMap)
                 hostReactor?.activate()
             }
-            Protocol.Event.NETWORK_INTERFACE -> {
+            Protocol.Event.HOST_STATES_CHANGE -> {
                 contactStatus.accept(ContactStatus.COMMUNICATING)
 
-                val n = msg.obj as NetworkInterface
-                hostMap?.interfaces?.get(n.name)?.base?.accept(n)
+                val change = msg.obj as HostStatesChange
+                hostWifiCountryCode = change.wifiCountryCode
+
+                change.run {
+                    interfaces.forEach {
+                        hostMap?.interfaces?.get(it.name)?.base?.accept(it)
+                    }
+                    services.forEach {
+                        hostMap?.services?.get(it.name)?.base?.accept(it)
+                    }
+                }
             }
-            Protocol.Event.SERVICE -> {
+            Protocol.Event.HOST_CHOICES -> {
                 contactStatus.accept(ContactStatus.COMMUNICATING)
 
-                val s = msg.obj as Service
-                hostMap?.services?.get(s.name)?.base?.accept(s)
+                Available.countries = (msg.obj as HostChoices).countries
             }
         }
         true
@@ -1072,7 +1132,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onStop() {
         AccessoryChannel.opened?.run {
-            send(Command("system" , "stop"))
+            send(Command("monitor" , "stop"))
             removeHandler(protocolHandler)
         }
 
@@ -1097,7 +1157,7 @@ class MainActivity : AppCompatActivity() {
 
         AccessoryChannel.opened?.run {
             addHandler(protocolHandler)
-            send(Command("system", "start"))
+            send(Command("monitor", "start"))
         } ?: run {
             // When app is not open, plugging USB invokes it.
             // In this case, onResume() is called before USB-connected event is received

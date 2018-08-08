@@ -7,7 +7,8 @@
     <string name="no_plug">Plug in Raspberry Pi via USB</string>
     <string name="accessory_none">This app requires Plug n Pi Server enabled on Raspberry Pi. Please enable it.</string>
     <string name="accessory_unrecognized">Incompatible device</string>
-    <string name="accessory_version_unsupported">The app does not support the version of protocol used by Raspberry Pi. Please update the app.</string>
+    <string name="accessory_version_too_old">Protocol used by Raspberry Pi is obsolete. Please update Plug n Pi Server on Raspberry Pi.</string>
+    <string name="accessory_version_too_new">Protocol used by Raspberry Pi is too advanced for the app. Please update the app.</string>
     <string name="accessory_permission_denied">You did not permit the app to talk to Raspberry Pi. Re-plug to try again.</string>
     <string name="accessory_open_failed">Unable to connect Raspberry Pi. Re-plug to try again.</string>
     <string name="dialing_timed_out">Unable to establish contact with Raspberry Pi. Re-plug to try again.</string>
@@ -28,4 +29,7 @@
     <string name="confirm_reboot">Raspberry Pi will reboot</string>
     <string name="host_halting">Raspberry Pi is shutting down</string>
     <string name="host_rebooting">Raspberry Pi is rebooting. Connection will be back up soon.</string>
+
+    <string name="pick_country_dialog_title">Where are you? I need to know to configure Pi\'s WiFi.</string>
+    <string name="pick_country_dialog_brief_title">Where are you?</string>
 </resources>
